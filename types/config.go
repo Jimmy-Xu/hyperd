@@ -8,6 +8,7 @@ import (
 	"github.com/Unknwon/goconfig"
 	"github.com/hyperhq/hypercontainer-utils/hlog"
 	"github.com/hyperhq/hyperd/utils"
+	"github.com/Sirupsen/logrus"
 )
 
 type HyperConfig struct {
@@ -27,11 +28,15 @@ type HyperConfig struct {
 	EnableVsock     bool
 	DefaultLog      string
 	DefaultLogOpt   map[string]string
+	GraphOptions	[]string
 
 	logPrefix string
 }
 
 func NewHyperConfig(config string) *HyperConfig {
+	logrus.Debugf("[types/config.go/NewHyperConfig] Begin - config:%v", config)
+	defer logrus.Debugf("[types/config.go/NewHyperConfig] End - config:%v", config)
+
 	if config == "" {
 		config = "/etc/hyper/config"
 	}
@@ -68,6 +73,8 @@ func NewHyperConfig(config string) *HyperConfig {
 	c.DefaultLogOpt, _ = cfg.GetSection("Log")
 	c.VmFactoryPolicy, _ = cfg.GetValue(goconfig.DEFAULT_SECTION, "VmFactoryPolicy")
 	c.GRPCHost, _ = cfg.GetValue(goconfig.DEFAULT_SECTION, "gRPCHost")
+	graphOption, _ := cfg.GetValue(goconfig.DEFAULT_SECTION, "GraphOptions")
+	c.GraphOptions = strings.Split(graphOption, " ")
 
 	c.Log(hlog.INFO, "config items: %#v", c)
 	return c

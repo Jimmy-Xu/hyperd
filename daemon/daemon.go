@@ -22,6 +22,7 @@ import (
 	"github.com/hyperhq/runv/driverloader"
 	"github.com/hyperhq/runv/factory"
 	"github.com/hyperhq/runv/hypervisor"
+	"github.com/Sirupsen/logrus"
 )
 
 var (
@@ -89,6 +90,9 @@ func (daemon *Daemon) Restore() error {
 }
 
 func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] Begin - cfg:%v", cfg)
+	defer logrus.Debugf("[daemon/daemon.go/NewDaemon] End - cfg:%v", cfg)
+
 	var tempdir = path.Join(utils.HYPER_ROOT, "run")
 	os.Setenv("TMPDIR", tempdir)
 	if err := os.MkdirAll(tempdir, 0755); err != nil && !os.IsExist(err) {
@@ -116,7 +120,12 @@ func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
 		Host:    cfg.Host,
 	}
 
+	//important: assign GraphOptions
+	dockerCfg.GraphDriver = cfg.StorageDriver
+	dockerCfg.GraphOptions = cfg.GraphOptions
+	fmt.Printf("[daemon/daemon.go/NewDaemon] before docker.NewDaemon - dockerCfg:%v\n",dockerCfg)
 	daemon.Daemon, err = docker.NewDaemon(dockerCfg, registryCfg)
+	fmt.Printf("[daemon/daemon.go/NewDaemon] after docker.NewDaemon - dockerCfg:%v\n",dockerCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -131,19 +140,28 @@ func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
 		return nil, err
 	}
 	daemon.Storage = stor
-	daemon.Storage.Init()
 
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] before daemon.Storage.Init()")
+	daemon.Storage.Init()
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] after daemon.Storage.Init()")
+
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] before daemon.initRunV")
 	err = daemon.initRunV(cfg)
 	if err != nil {
 		return nil, err
 	}
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] after daemon.initRunV")
 
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] before daemon.initNetworks()")
 	err = daemon.initNetworks(cfg)
 	if err != nil {
 		return nil, err
 	}
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] after daemon.initNetworks()")
 
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] before daemon.initDefaultLog()")
 	daemon.initDefaultLog(cfg)
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] after daemon.initDefaultLog()")
 
 	return daemon, nil
 }
@@ -157,6 +175,9 @@ func presentInHelp(usage string) string { return usage }
 func absentFromHelp(string) string      { return "" }
 
 func InitDockerCfg(mirrors []string, insecureRegistries []string, graphdriver, root string) {
+	fmt.Printf("[daemon/daemon.go/InitDockerCfg] Begin - mirrors:%v insecureRegistries:%v graphdriver:%v root:%v\n",mirrors,insecureRegistries,graphdriver,root)
+	defer fmt.Printf("[daemon/daemon.go/InitDockerCfg] End - mirrors:%v insecureRegistries:%v graphdriver:%v root:%v\n",mirrors,insecureRegistries,graphdriver,root)
+
 	if dockerCfg.LogConfig.Config == nil {
 		dockerCfg.LogConfig.Config = make(map[string]string)
 	}

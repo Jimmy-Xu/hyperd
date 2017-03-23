@@ -26,6 +26,8 @@ type Options struct {
 	Hosts              string
 	Mirrors            string
 	InsecureRegistries string
+	StorageDriver      string
+	GraphOptions       []string
 }
 
 func main() {
@@ -43,6 +45,10 @@ func main() {
 		glog.Errorf(err.Error())
 		return
 	}
+
+	graphOptions := []string{}
+	flag.Var(opts.NewNamedListOptsRef("storage-opts", &graphOptions, nil), "storage-opt", "Storage driver options")
+	flStorageDriver := flag.String("storage-driver", "devicemapper", "Storage driver to use")
 
 	fnd := flag.Bool("nondaemon", false, "[deprecated flag]") // TODO: remove it when 0.8 is released
 	flDisableIptables := flag.Bool("noniptables", false, "Don't enable iptables rules")
@@ -70,8 +76,12 @@ func main() {
 		Hosts:              *flHost,
 		Mirrors:            *flMirrors,
 		InsecureRegistries: *flInsecureRegistries,
+		StorageDriver:      *flStorageDriver,
+		GraphOptions:       graphOptions,
 	}
 
+	fmt.Printf("[hyperd.go/main] flStorageDriver:%v\n", flStorageDriver)
+	fmt.Printf("[hyperd.go/main] opt.GraphOptions:%v\n", opt.GraphOptions)
 	mainDaemon(opt)
 }
 
@@ -88,6 +98,8 @@ Application Options:
   --insecure_registry    Enable insecure registry communication, multiple values separated by a comma
   --logtostderr          Log to standard error instead of files
   --alsologtostderr      Log to standard error as well as files
+  --storage-driver	 Storage driver to use
+  --storage-opts	 Storage driver options
 
 Help Options:
   -h, --help             Show this help message
@@ -97,6 +109,8 @@ Help Options:
 }
 
 func mainDaemon(opt *Options) {
+	fmt.Printf("[hyperd.go/mainDaemon] Begin - opt:%v\n", opt)
+
 	c := types.NewHyperConfig(opt.Config)
 	if c == nil {
 		return
@@ -111,8 +125,14 @@ func mainDaemon(opt *Options) {
 		}
 	}
 
+	fmt.Printf("[hyperd.go/mainDaemon] Before daemon.InitDockerCfg\n")
 	daemon.InitDockerCfg(strings.Split(opt.Mirrors, ","), strings.Split(opt.InsecureRegistries, ","), c.StorageDriver, c.Root)
+
+	c.StorageDriver = opt.StorageDriver
+	c.GraphOptions = opt.GraphOptions
+	fmt.Printf("[hyperd.go/mainDaemon] Before daemon.NewDaemon - c:%v\n",c)
 	d, err := daemon.NewDaemon(c)
+	fmt.Printf("[hyperd.go/mainDaemon] End daemon.NewDaemon - c:%v\n",c)
 	if err != nil {
 		glog.Errorf("The hyperd create failed, %s", err.Error())
 		return
@@ -216,6 +236,7 @@ func mainDaemon(opt *Options) {
 		break
 	}
 	d.Shutdown()
+	fmt.Printf("[hyperd.go/mainDaemon] End - opt:%v\n", opt)
 }
 
 func checkKernel(k, major, minor int) error {

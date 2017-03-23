@@ -177,12 +177,14 @@ func New(root string, name string, options []string, uidMaps, gidMaps []idtools.
 
 	// Check all registered drivers if no priority driver is found
 	for _, initFunc := range drivers {
+		logrus.Debugf("[graphdriver/driver.go/New] Before initFunc - root:%v options:%v uidMaps:%v gidMaps:%v",root,options,uidMaps,gidMaps)
 		if driver, err = initFunc(root, options, uidMaps, gidMaps); err != nil {
 			if err == ErrNotSupported || err == ErrPrerequisites || err == ErrIncompatibleFS {
 				continue
 			}
 			return nil, err
 		}
+		logrus.Debugf("[graphdriver/driver.go/New] After initFunc - root:%v options:%v uidMaps:%v gidMaps:%v",root,options,uidMaps,gidMaps)
 		return driver, nil
 	}
 	return nil, fmt.Errorf("No supported storage backend found")

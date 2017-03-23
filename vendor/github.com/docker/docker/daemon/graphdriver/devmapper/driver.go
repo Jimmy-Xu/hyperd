@@ -32,6 +32,9 @@ type Driver struct {
 
 // Init creates a driver with the given home and the set of options.
 func Init(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (graphdriver.Driver, error) {
+	logrus.Debugf("[devmapper/driver.go/Init] Begin - home:%v options:%v uidMaps:%v gidMaps:%v", home,options,uidMaps,gidMaps)
+	defer logrus.Debugf("[devmapper/driver.go/Init] End - home:%v options:%v uidMaps:%v gidMaps:%v", home,options,uidMaps,gidMaps)
+
 	deviceSet, err := NewDeviceSet(home, true, options, uidMaps, gidMaps)
 	if err != nil {
 		return nil, err

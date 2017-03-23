@@ -324,6 +324,7 @@ func (devices *DeviceSet) removeMetadata(info *devInfo) error {
 
 // Given json data and file path, write it to disk
 func (devices *DeviceSet) writeMetaFile(jsonData []byte, filePath string) error {
+	logrus.Debugf("[deviceset.go/writeMetaFile] Begin - jsonData:%v filePath:%v", jsonData, filePath)
 	tmpFile, err := ioutil.TempFile(devices.metadataDir(), ".tmp")
 	if err != nil {
 		return fmt.Errorf("devmapper: Error creating metadata file: %s", err)
@@ -345,11 +346,12 @@ func (devices *DeviceSet) writeMetaFile(jsonData []byte, filePath string) error 
 	if err := os.Rename(tmpFile.Name(), filePath); err != nil {
 		return fmt.Errorf("devmapper: Error committing metadata file %s: %s", tmpFile.Name(), err)
 	}
-
+	logrus.Debugf("[deviceset.go/writeMetaFile] End - jsonData:%v filePath:%v", jsonData, filePath)
 	return nil
 }
 
 func (devices *DeviceSet) saveMetadata(info *devInfo) error {
+	logrus.Debugf("[deviceset.go/saveMetadata] Begin - info.DevName():%v", info.DevName())
 	jsonData, err := json.Marshal(info)
 	if err != nil {
 		return fmt.Errorf("devmapper: Error encoding metadata to json: %s", err)
@@ -357,6 +359,7 @@ func (devices *DeviceSet) saveMetadata(info *devInfo) error {
 	if err := devices.writeMetaFile(jsonData, devices.metadataFile(info)); err != nil {
 		return err
 	}
+	logrus.Debugf("[deviceset.go/saveMetadata] End - info.DevName():%v", info.DevName())
 	return nil
 }
 
@@ -497,6 +500,7 @@ func (devices *DeviceSet) unregisterDevice(id int, hash string) error {
 
 // Should be called with devices.Lock() held.
 func (devices *DeviceSet) registerDevice(id int, hash string, size uint64, transactionID uint64) (*devInfo, error) {
+	logrus.Debugf("[deviceset.go/registerDevice] Begin - id:%v hash:%v size:%v transactionID:%v", id,hash,size,transactionID)
 	logrus.Debugf("devmapper: registerDevice(%v, %v)", id, hash)
 	info := &devInfo{
 		Hash:          hash,
@@ -514,11 +518,12 @@ func (devices *DeviceSet) registerDevice(id int, hash string, size uint64, trans
 		delete(devices.Devices, hash)
 		return nil, err
 	}
-
+	logrus.Debugf("[deviceset.go/registerDevice] End - id:%v hash:%v size:%v transactionID:%v", id,hash,size,transactionID)
 	return info, nil
 }
 
 func (devices *DeviceSet) activateDeviceIfNeeded(info *devInfo, ignoreDeleted bool) error {
+	logrus.Debugf("[deviceset.go/activateDeviceIfNeeded] Begin - info.DevName():%v ignoreDeleted:%v", info.DevName(),ignoreDeleted)
 	logrus.Debugf("devmapper: activateDeviceIfNeeded(%v)", info.Hash)
 
 	if info.Deleted && !ignoreDeleted {
@@ -535,11 +540,14 @@ func (devices *DeviceSet) activateDeviceIfNeeded(info *devInfo, ignoreDeleted bo
 		return nil
 	}
 
+	logrus.Debugf("[deviceset.go/activateDeviceIfNeeded] End - info.DevName():%v ignoreDeleted:%v", info.DevName(),ignoreDeleted)
 	return devicemapper.ActivateDevice(devices.getPoolDevName(), info.Name(), info.DeviceID, info.Size)
 }
 
 // Return true only if kernel supports xfs and mkfs.xfs is available
 func xfsSupported() bool {
+	logrus.Debugf("[deviceset.go/xfsSupported] Begin")
+	defer logrus.Debugf("[deviceset.go/xfsSupported] End")
 	// Make sure mkfs.xfs is available
 	if _, err := exec.LookPath("mkfs.xfs"); err != nil {
 		return false
@@ -569,6 +577,8 @@ func xfsSupported() bool {
 }
 
 func determineDefaultFS() string {
+	logrus.Debugf("[deviceset.go/determineDefaultFS] Begin")
+	defer logrus.Debugf("[deviceset.go/determineDefaultFS] End")
 	if xfsSupported() {
 		return "xfs"
 	}
@@ -578,6 +588,7 @@ func determineDefaultFS() string {
 }
 
 func (devices *DeviceSet) createFilesystem(info *devInfo) (err error) {
+	logrus.Debugf("[deviceset.go/createFilesystem] Begin - info.DevName():%v", info.DevName())
 	devname := info.DevName()
 
 	args := []string{}
@@ -618,6 +629,7 @@ func (devices *DeviceSet) createFilesystem(info *devInfo) (err error) {
 	default:
 		err = fmt.Errorf("devmapper: Unsupported filesystem type %s", devices.filesystem)
 	}
+	logrus.Debugf("[deviceset.go/createFilesystem] End - info.DevName():%v", info.DevName())
 	return
 }
 
@@ -651,6 +663,8 @@ func (devices *DeviceSet) migrateOldMetaData() error {
 // Cleanup deleted devices. It assumes that all the devices have been
 // loaded in the hash table.
 func (devices *DeviceSet) cleanupDeletedDevices() error {
+	logrus.Debugf("[deviceset.go/cleanupDeletedDevices] Begin")
+	defer logrus.Debugf("[deviceset.go/cleanupDeletedDevices] End")
 	devices.Lock()
 
 	// If there are no deleted devices, there is nothing to do.
@@ -705,6 +719,8 @@ func (devices *DeviceSet) startDeviceDeletionWorker() {
 }
 
 func (devices *DeviceSet) initMetaData() error {
+	logrus.Debugf("[deviceset.go/initMetaData] Begin")
+	defer logrus.Debugf("[deviceset.go/initMetaData] End")
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -741,6 +757,8 @@ func (devices *DeviceSet) incNextDeviceID() {
 }
 
 func (devices *DeviceSet) getNextFreeDeviceID() (int, error) {
+	logrus.Debugf("[deviceset.go/getNextFreeDeviceID] Begin")
+	defer logrus.Debugf("[deviceset.go/getNextFreeDeviceID] End")
 	devices.incNextDeviceID()
 	for i := 0; i <= maxDeviceID; i++ {
 		if devices.isDeviceIDFree(devices.NextDeviceID) {
@@ -754,6 +772,9 @@ func (devices *DeviceSet) getNextFreeDeviceID() (int, error) {
 }
 
 func (devices *DeviceSet) createRegisterDevice(hash string) (*devInfo, error) {
+	logrus.Debugf("[deviceset.go/createRegisterDevice] Begin - hash:%v",hash)
+	defer logrus.Debugf("[deviceset.go/createRegisterDevice] End - hash:%v",hash)
+
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -809,6 +830,9 @@ func (devices *DeviceSet) createRegisterDevice(hash string) (*devInfo, error) {
 }
 
 func (devices *DeviceSet) createRegisterSnapDevice(hash string, baseInfo *devInfo) error {
+	logrus.Debugf("[deviceset.go/createRegisterSnapDevice] Begin - hash:%v bashInfo:%v",hash, baseInfo.DevName())
+	defer logrus.Debugf("[deviceset.go/createRegisterSnapDevice] End - hash:%v bashInfo:%v",hash, baseInfo.DevName())
+
 	deviceID, err := devices.getNextFreeDeviceID()
 	if err != nil {
 		return err
@@ -860,6 +884,9 @@ func (devices *DeviceSet) createRegisterSnapDevice(hash string, baseInfo *devInf
 }
 
 func (devices *DeviceSet) loadMetadata(hash string) *devInfo {
+	logrus.Debugf("[deviceset.go/loadMetadata] Begin - hash:%v",hash)
+	defer logrus.Debugf("[deviceset.go/loadMetadata] End - hash:%v",hash)
+
 	info := &devInfo{Hash: hash, devices: devices}
 
 	jsonData, err := ioutil.ReadFile(devices.metadataFile(info))
@@ -880,6 +907,9 @@ func (devices *DeviceSet) loadMetadata(hash string) *devInfo {
 }
 
 func getDeviceUUID(device string) (string, error) {
+	logrus.Debugf("[deviceset.go/getDeviceUUID] Begin - device:%v",device)
+	defer logrus.Debugf("[deviceset.go/getDeviceUUID] End - device:%v",device)
+
 	out, err := exec.Command("blkid", "-s", "UUID", "-o", "value", device).Output()
 	if err != nil {
 		return "", fmt.Errorf("devmapper: Failed to find uuid for device %s:%v", device, err)
@@ -900,10 +930,12 @@ func (devices *DeviceSet) getBaseDeviceSize() uint64 {
 }
 
 func (devices *DeviceSet) getBaseDeviceFS() string {
+	logrus.Debugf("[deviceset.go/getBaseDeviceFS] devices.BaseDeviceFilesystem:%v",devices.BaseDeviceFilesystem)
 	return devices.BaseDeviceFilesystem
 }
 
 func (devices *DeviceSet) verifyBaseDeviceUUIDFS(baseInfo *devInfo) error {
+	logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] Begin - baseInfo.DevName():%v", baseInfo.DevName())
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -938,15 +970,20 @@ func (devices *DeviceSet) verifyBaseDeviceUUIDFS(baseInfo *devInfo) error {
 		logrus.Warnf("devmapper: Base device already exists and has filesystem %s on it. User specified filesystem %s will be ignored.", devices.BaseDeviceFilesystem, devices.filesystem)
 		devices.filesystem = devices.BaseDeviceFilesystem
 	}
+	logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] End - baseInfo.DevName():%v", baseInfo.DevName())
 	return nil
 }
 
 func (devices *DeviceSet) saveBaseDeviceFilesystem(fs string) error {
+	logrus.Debugf("[deviceset.go/saveBaseDeviceFilesystem] fs:%v", fs)
 	devices.BaseDeviceFilesystem = fs
 	return devices.saveDeviceSetMetaData()
 }
 
 func (devices *DeviceSet) saveBaseDeviceUUID(baseInfo *devInfo) error {
+	logrus.Debugf("[deviceset.go/saveBaseDeviceUUID] Begin - baseInfo.DevName():%v", baseInfo.DevName())
+	defer logrus.Debugf("[deviceset.go/saveBaseDeviceUUID] End - baseInfo.DevName():%v", baseInfo.DevName())
+
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -965,6 +1002,8 @@ func (devices *DeviceSet) saveBaseDeviceUUID(baseInfo *devInfo) error {
 }
 
 func (devices *DeviceSet) createBaseImage() error {
+	logrus.Debugf("[deviceset.go/createBaseImage] Begin")
+
 	logrus.Debugf("devmapper: Initializing base device-mapper thin volume")
 
 	// Create initial device
@@ -992,13 +1031,16 @@ func (devices *DeviceSet) createBaseImage() error {
 	if err := devices.saveBaseDeviceUUID(info); err != nil {
 		return fmt.Errorf("devmapper: Could not query and save base device UUID:%v", err)
 	}
-
+	logrus.Debugf("[deviceset.go/createBaseImage] End - info.DevName():%v", info.DevName())
 	return nil
 }
 
 // Returns if thin pool device exists or not. If device exists, also makes
 // sure it is a thin pool device and not some other type of device.
 func (devices *DeviceSet) thinPoolExists(thinPoolDevice string) (bool, error) {
+	logrus.Debugf("[deviceset.go/thinPoolExists] Begin - thinPoolDevice:%v",thinPoolDevice)
+	defer logrus.Debugf("[deviceset.go/thinPoolExists] End - thinPoolDevice:%v",thinPoolDevice)
+
 	logrus.Debugf("devmapper: Checking for existence of the pool %s", thinPoolDevice)
 
 	info, err := devicemapper.GetInfo(thinPoolDevice)
@@ -1042,6 +1084,9 @@ func (devices *DeviceSet) checkThinPool() error {
 // Base image is initialized properly. Either save UUID for first time (for
 // upgrade case or verify UUID.
 func (devices *DeviceSet) setupVerifyBaseImageUUIDFS(baseInfo *devInfo) error {
+	logrus.Debugf("[deviceset.go/setupVerifyBaseImageUUIDFS] Begin - baseInfo.DevName():%v",baseInfo.DevName())
+	defer logrus.Debugf("[deviceset.go/setupVerifyBaseImageUUIDFS] End - baseInfo.DevName():%v",baseInfo.DevName())
+
 	// If BaseDeviceUUID is nil (upgrade case), save it and return success.
 	if devices.BaseDeviceUUID == "" {
 		if err := devices.saveBaseDeviceUUID(baseInfo); err != nil {
@@ -1132,6 +1177,9 @@ func (devices *DeviceSet) growFS(info *devInfo) error {
 }
 
 func (devices *DeviceSet) setupBaseImage() error {
+	logrus.Debugf("[deviceset.go/setupBaseImage] Begin")
+	defer logrus.Debugf("[deviceset.go/setupBaseImage] End")
+
 	oldInfo, _ := devices.lookupDeviceWithLock("")
 
 	// base image already exists. If it is initialized properly, do UUID
@@ -1585,6 +1633,9 @@ func (devices *DeviceSet) loadThinPoolLoopBackInfo() error {
 }
 
 func (devices *DeviceSet) initDevmapper(doInit bool) error {
+	logrus.Debugf("[deviceset.go/initDevmapper] Begin: doInit:%v", doInit)
+	defer logrus.Debugf("[deviceset.go/initDevmapper] End: doInit:%v", doInit)
+
 	// give ourselves to libdm as a log handler
 	devicemapper.LogInit(devices)
 
@@ -1787,12 +1838,14 @@ func (devices *DeviceSet) initDevmapper(doInit bool) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
 // AddDevice adds a device and registers in the hash.
 func (devices *DeviceSet) AddDevice(hash, baseHash string) error {
+	logrus.Debugf("[deviceset.go/AddDevice] Begin - hash:%v baseHash:%v",hash,baseHash)
+	defer logrus.Debugf("[deviceset.go/AddDevice] End - hash:%v baseHash:%v",hash,baseHash)
+
 	logrus.Debugf("devmapper: AddDevice(hash=%s basehash=%s)", hash, baseHash)
 	defer logrus.Debugf("devmapper: AddDevice(hash=%s basehash=%s) END", hash, baseHash)
 
@@ -1916,6 +1969,9 @@ func (devices *DeviceSet) issueDiscard(info *devInfo) error {
 
 // Should be called with devices.Lock() held.
 func (devices *DeviceSet) deleteDevice(info *devInfo, syncDelete bool) error {
+	logrus.Debugf("[deviceset.go/deleteDevice] Begin - info.DevName():%v syncDelete:%v",info.DevName(),syncDelete)
+	defer logrus.Debugf("[deviceset.go/deleteDevice] End - info.DevName():%v syncDelete:%v",info.DevName(),syncDelete)
+
 	if devices.doBlkDiscard {
 		devices.issueDiscard(info)
 	}
@@ -1939,6 +1995,7 @@ func (devices *DeviceSet) deleteDevice(info *devInfo, syncDelete bool) error {
 func (devices *DeviceSet) DeleteDevice(hash string, syncDelete bool) error {
 	logrus.Debugf("devmapper: DeleteDevice(hash=%v syncDelete=%v) START", hash, syncDelete)
 	defer logrus.Debugf("devmapper: DeleteDevice(hash=%v syncDelete=%v) END", hash, syncDelete)
+
 	info, err := devices.lookupDeviceWithLock(hash)
 	if err != nil {
 		return err
@@ -1961,6 +2018,9 @@ func (devices *DeviceSet) DeleteDevice(hash string, syncDelete bool) error {
 }
 
 func (devices *DeviceSet) deactivatePool() error {
+	logrus.Debugf("[deviceset.go/deactivatePool] Begin - devices.getPoolDevName():%v",devices.getPoolDevName())
+	defer logrus.Debugf("[deviceset.go/deactivatePool] End - devices.getPoolDevName():%v",devices.getPoolDevName())
+
 	logrus.Debugf("devmapper: deactivatePool()")
 	defer logrus.Debugf("devmapper: deactivatePool END")
 	devname := devices.getPoolDevName()
@@ -2011,6 +2071,9 @@ func (devices *DeviceSet) deactivateDevice(info *devInfo) error {
 
 // Issues the underlying dm remove operation.
 func (devices *DeviceSet) removeDevice(devname string) error {
+	logrus.Debugf("[deviceset.go/removeDevice] Begin - devname:%v",devname)
+	defer logrus.Debugf("[deviceset.go/removeDevice] End - devname:%v",devname)
+
 	var err error
 
 	logrus.Debugf("devmapper: removeDevice START(%s)", devname)
@@ -2076,6 +2139,9 @@ func (devices *DeviceSet) cancelDeferredRemoval(info *devInfo) error {
 
 // Shutdown shuts down the device by unmounting the root.
 func (devices *DeviceSet) Shutdown() error {
+	logrus.Debugf("[deviceset.go/Shutdown] Begin")
+	defer logrus.Debugf("[deviceset.go/Shutdown] End")
+
 	logrus.Debugf("devmapper: [deviceset %s] Shutdown()", devices.devicePrefix)
 	logrus.Debugf("devmapper: Shutting down DeviceSet: %s", devices.root)
 	defer logrus.Debugf("devmapper: [deviceset %s] Shutdown() END", devices.devicePrefix)
@@ -2146,6 +2212,9 @@ func (devices *DeviceSet) Shutdown() error {
 
 // MountDevice mounts the device if not already mounted.
 func (devices *DeviceSet) MountDevice(hash, path, mountLabel string) error {
+	logrus.Debugf("[deviceset.go/MountDevice] Begin - hash:%v path:%v mountLabel:%v",hash,path,mountLabel)
+	defer logrus.Debugf("[deviceset.go/MountDevice] End - hash:%v path:%v mountLabel:%v",hash,path,mountLabel)
+
 	info, err := devices.lookupDeviceWithLock(hash)
 	if err != nil {
 		return err
@@ -2201,6 +2270,10 @@ func (devices *DeviceSet) MountDevice(hash, path, mountLabel string) error {
 
 // UnmountDevice unmounts the device and removes it from hash.
 func (devices *DeviceSet) UnmountDevice(hash, mountPath string) error {
+	logrus.Debugf("[deviceset.go/UnmountDevice] Begin - hash:%v mountPath:%v",hash,mountPath)
+	defer logrus.Debugf("[deviceset.go/UnmountDevice] End - hash:%v mountPath:%v",hash,mountPath)
+
+	logrus.Debugf("[deviceset.go/UnmountDevice] Begin - hash:%v mountPath:%v",hash, mountPath)
 	logrus.Debugf("devmapper: UnmountDevice(hash=%s)", hash)
 	defer logrus.Debugf("devmapper: UnmountDevice(hash=%s) END", hash)
 
@@ -2240,7 +2313,7 @@ func (devices *DeviceSet) UnmountDevice(hash, mountPath string) error {
 	}
 
 	info.mountPath = ""
-
+	logrus.Debugf("[deviceset.go/UnmountDevice] End - hash:%v mountPath:%v",hash, mountPath)
 	return nil
 }
 
@@ -2422,6 +2495,9 @@ func (devices *DeviceSet) exportDeviceMetadata(hash string) (*deviceMetadata, er
 
 // NewDeviceSet creates the device set based on the options provided.
 func NewDeviceSet(root string, doInit bool, options []string, uidMaps, gidMaps []idtools.IDMap) (*DeviceSet, error) {
+	logrus.Debugf("[deviceset.go/NewDeviceSet] Begin - root:%v doInit:%v options:%v uidMaps:%v gidMaps:%v", root,doInit,options,uidMaps,gidMaps)
+	defer logrus.Debugf("[deviceset.go/NewDeviceSet] End - root:%v doInit:%v options:%v uidMaps:%v gidMaps:%v", root,doInit,options,uidMaps,gidMaps)
+
 	devicemapper.SetDevDir("/dev")
 
 	devices := &DeviceSet{
@@ -2442,6 +2518,7 @@ func NewDeviceSet(root string, doInit bool, options []string, uidMaps, gidMaps [
 	foundBlkDiscard := false
 	for _, option := range options {
 		key, val, err := parsers.ParseKeyValueOpt(option)
+		logrus.Debugf("[deviceset.go/NewDeviceSet] options - key:%v val%v", key, val)
 		if err != nil {
 			return nil, err
 		}
@@ -2525,6 +2602,5 @@ func NewDeviceSet(root string, doInit bool, options []string, uidMaps, gidMaps [
 	if err := devices.initDevmapper(doInit); err != nil {
 		return nil, err
 	}
-
 	return devices, nil
 }

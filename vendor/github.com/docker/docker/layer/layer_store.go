@@ -47,6 +47,9 @@ type StoreOptions struct {
 
 // NewStoreFromOptions creates a new Store instance
 func NewStoreFromOptions(options StoreOptions) (Store, error) {
+	logrus.Debugf("[layer_store.go/NewStoreFromOptions] Begin options:%v",options)
+	defer logrus.Debugf("[layer_store.go/NewStoreFromOptions] End options:%v",options)
+
 	driver, err := graphdriver.New(
 		options.StorePath,
 		options.GraphDriver,

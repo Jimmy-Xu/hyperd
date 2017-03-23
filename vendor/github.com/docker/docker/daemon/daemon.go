@@ -605,6 +605,9 @@ func (daemon *Daemon) registerLink(parent, child *container.Container, alias str
 // NewDaemon sets up everything for the daemon to be able to service
 // requests from the webserver.
 func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemon, err error) {
+	logrus.Debugf("[vendor/.../daemon.go/NewDaemon] Begin - config:%v registryService:%v", config, registryService)
+	defer logrus.Debugf("[vendor/.../daemon.go/NewDaemon] End - config:%v registryService:%v", config, registryService)
+
 	setDefaultMtu(config)
 
 	// Ensure we have compatible and valid configuration options
@@ -692,6 +695,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 	if driverName == "" {
 		driverName = config.GraphDriver
 	}
+	logrus.Debugf("[daemon.go/NewDaemon] before NewStoreFromOptions - GraphDriver:%v, GraphDriverOptions%v", driverName, config.GraphOptions)
 	d.layerStore, err = layer.NewStoreFromOptions(layer.StoreOptions{
 		StorePath:                 config.Root,
 		MetadataStorePathTemplate: filepath.Join(config.Root, "image", "%s", "layerdb"),
@@ -700,6 +704,7 @@ func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemo
 		UIDMaps:                   uidMaps,
 		GIDMaps:                   gidMaps,
 	})
+	logrus.Debugf("[daemon.go/NewDaemon] after NewStoreFromOptions - GraphDriver:%v, GraphDriverOptions%v", driverName, config.GraphOptions)
 	if err != nil {
 		return nil, err
 	}
