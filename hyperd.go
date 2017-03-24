@@ -80,8 +80,7 @@ func main() {
 		GraphOptions:       graphOptions,
 	}
 
-	fmt.Printf("[hyperd.go/main] flStorageDriver:%v\n", flStorageDriver)
-	fmt.Printf("[hyperd.go/main] opt.GraphOptions:%v\n", opt.GraphOptions)
+	fmt.Printf("\n[hyperd.go/main] flStorageDriver:%v opt.GraphOption:%v\n", *flStorageDriver,opt.GraphOptions)
 	mainDaemon(opt)
 }
 
@@ -109,7 +108,7 @@ Help Options:
 }
 
 func mainDaemon(opt *Options) {
-	fmt.Printf("[hyperd.go/mainDaemon] Begin - opt:%v\n", opt)
+	fmt.Printf("\n[hyperd.go/mainDaemon] Begin - opt:%v\n", opt)
 
 	c := types.NewHyperConfig(opt.Config)
 	if c == nil {
@@ -125,14 +124,15 @@ func mainDaemon(opt *Options) {
 		}
 	}
 
-	fmt.Printf("[hyperd.go/mainDaemon] Before daemon.InitDockerCfg\n")
+	fmt.Printf("\n[hyperd.go/mainDaemon] before daemon.InitDockerCfg\n")
 	daemon.InitDockerCfg(strings.Split(opt.Mirrors, ","), strings.Split(opt.InsecureRegistries, ","), c.StorageDriver, c.Root)
+	fmt.Printf("[hyperd.go/mainDaemon] after daemon.InitDockerCfg\n")
 
 	c.StorageDriver = opt.StorageDriver
 	c.GraphOptions = opt.GraphOptions
-	fmt.Printf("[hyperd.go/mainDaemon] Before daemon.NewDaemon - c:%v\n",c)
+	fmt.Printf("\n[hyperd.go/mainDaemon] before daemon.NewDaemon - c.StorageDriver:%v c.GraphOptions:%v\n",c.StorageDriver,c.GraphOptions)
 	d, err := daemon.NewDaemon(c)
-	fmt.Printf("[hyperd.go/mainDaemon] End daemon.NewDaemon - c:%v\n",c)
+	fmt.Printf("\n[hyperd.go/mainDaemon] after daemon.NewDaemon - c.StorageDriver:%v c.GraphOptions:%v\n",c.StorageDriver,c.GraphOptions)
 	if err != nil {
 		glog.Errorf("The hyperd create failed, %s", err.Error())
 		return
@@ -181,7 +181,9 @@ func mainDaemon(opt *Options) {
 		return
 	}
 
+	fmt.Printf("[hyperd.go/mainDaemon] before api.InitRouters\n")
 	api.InitRouters(d)
+	fmt.Printf("[hyperd.go/mainDaemon] after api.InitRouters\n")
 
 	var rpcServer *serverrpc.ServerRPC = nil
 	if c.GRPCHost != "" {
@@ -215,6 +217,7 @@ func mainDaemon(opt *Options) {
 		}
 	}
 
+	fmt.Printf("[hyperd.go/mainDaemon] Daemon is fully initialized\n")
 	// Daemon is fully initialized and handling API traffic
 	// Wait for serve API job to complete
 	select {
@@ -235,8 +238,9 @@ func mainDaemon(opt *Options) {
 		d.DestroyAllVm()
 		break
 	}
+	fmt.Printf("[hyperd.go/mainDaemon] before d.Shutdown - opt:%v\n", opt)
 	d.Shutdown()
-	fmt.Printf("[hyperd.go/mainDaemon] End - opt:%v\n", opt)
+	fmt.Printf("[hyperd.go/mainDaemon] after d.Shutdown - opt:%v\n", opt)
 }
 
 func checkKernel(k, major, minor int) error {

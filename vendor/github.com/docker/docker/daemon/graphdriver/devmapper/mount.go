@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"github.com/Sirupsen/logrus"
 )
 
 // FIXME: this is copy-pasted from the aufs driver.
@@ -39,10 +40,14 @@ type probeData struct {
 
 // ProbeFsType returns the filesystem name for the given device id.
 func ProbeFsType(device string) (string, error) {
+	logrus.Debugf("[devmapper/mount.go/ProbeFsType] Begin - device: %v", device)
+	defer logrus.Debugf("[devmapper/mount.go/ProbeFsType] End - device: %v", device)
+
 	probes := []probeData{
 		{"btrfs", "_BHRfS_M", 0x10040},
 		{"ext4", "\123\357", 0x438},
 		{"xfs", "XFSB", 0},
+		{"ntfs-3g", "NTFS", 0x0e400003}, //0x0e400000 + 3
 	}
 
 	maxLen := uint64(0)

@@ -90,8 +90,7 @@ func (daemon *Daemon) Restore() error {
 }
 
 func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
-	logrus.Debugf("[daemon/daemon.go/NewDaemon] Begin - cfg:%v", cfg)
-	defer logrus.Debugf("[daemon/daemon.go/NewDaemon] End - cfg:%v", cfg)
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] Begin - cfg.StorageDriver:%v cfg.GraphOptions:%v", cfg.StorageDriver, cfg.GraphOptions)
 
 	var tempdir = path.Join(utils.HYPER_ROOT, "run")
 	os.Setenv("TMPDIR", tempdir)
@@ -123,9 +122,9 @@ func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
 	//important: assign GraphOptions
 	dockerCfg.GraphDriver = cfg.StorageDriver
 	dockerCfg.GraphOptions = cfg.GraphOptions
-	fmt.Printf("[daemon/daemon.go/NewDaemon] before docker.NewDaemon - dockerCfg:%v\n",dockerCfg)
+	fmt.Printf("[daemon/daemon.go/NewDaemon] before docker.NewDaemon - dockerCfg.GraphDriver:%v dockerCfg.GraphOptions:%v\n",dockerCfg.GraphDriver,dockerCfg.GraphOptions)
 	daemon.Daemon, err = docker.NewDaemon(dockerCfg, registryCfg)
-	fmt.Printf("[daemon/daemon.go/NewDaemon] after docker.NewDaemon - dockerCfg:%v\n",dockerCfg)
+	fmt.Printf("[daemon/daemon.go/NewDaemon] after docker.NewDaemon")
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +162,7 @@ func NewDaemon(cfg *apitypes.HyperConfig) (*Daemon, error) {
 	daemon.initDefaultLog(cfg)
 	logrus.Debugf("[daemon/daemon.go/NewDaemon] after daemon.initDefaultLog()")
 
+	logrus.Debugf("[daemon/daemon.go/NewDaemon] End - cfg.StorageDriver:%v cfg.GraphOptions:%v", cfg.StorageDriver, cfg.GraphOptions)
 	return daemon, nil
 }
 

@@ -19,8 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/devicemapper"
 	"github.com/docker/docker/pkg/idtools"
@@ -30,6 +28,7 @@ import (
 	"github.com/docker/go-units"
 
 	"github.com/opencontainers/runc/libcontainer/label"
+	"github.com/Sirupsen/logrus"
 )
 
 var (
@@ -324,7 +323,7 @@ func (devices *DeviceSet) removeMetadata(info *devInfo) error {
 
 // Given json data and file path, write it to disk
 func (devices *DeviceSet) writeMetaFile(jsonData []byte, filePath string) error {
-	logrus.Debugf("[deviceset.go/writeMetaFile] Begin - jsonData:%v filePath:%v", jsonData, filePath)
+	logrus.Debugf("[deviceset.go/writeMetaFile] Begin - jsonData:%v filePath:%v", string(jsonData), filePath)
 	tmpFile, err := ioutil.TempFile(devices.metadataDir(), ".tmp")
 	if err != nil {
 		return fmt.Errorf("devmapper: Error creating metadata file: %s", err)
@@ -346,7 +345,7 @@ func (devices *DeviceSet) writeMetaFile(jsonData []byte, filePath string) error 
 	if err := os.Rename(tmpFile.Name(), filePath); err != nil {
 		return fmt.Errorf("devmapper: Error committing metadata file %s: %s", tmpFile.Name(), err)
 	}
-	logrus.Debugf("[deviceset.go/writeMetaFile] End - jsonData:%v filePath:%v", jsonData, filePath)
+	logrus.Debugf("[deviceset.go/writeMetaFile] End - jsonData:%v filePath:%v", string(jsonData), filePath)
 	return nil
 }
 
@@ -588,15 +587,14 @@ func determineDefaultFS() string {
 }
 
 func (devices *DeviceSet) createFilesystem(info *devInfo) (err error) {
-	logrus.Debugf("[deviceset.go/createFilesystem] Begin - info.DevName():%v", info.DevName())
 	devname := info.DevName()
 
 	args := []string{}
-	for _, arg := range devices.mkfsArgs {
-		args = append(args, arg)
-	}
+	args = append(args, devices.mkfsArgs...)
 
-	args = append(args, devname)
+	if devices.filesystem != "ntfs-3g" {
+		args = append(args, devname)
+	}
 
 	if devices.filesystem == "" {
 		devices.filesystem = determineDefaultFS()
@@ -614,7 +612,34 @@ func (devices *DeviceSet) createFilesystem(info *devInfo) (err error) {
 		}
 	}()
 
+	logrus.Debugf("[deviceset.go/createFilesystem] devices.filesystem:%v args:%v", devices.filesystem, args)
 	switch devices.filesystem {
+	case "ntfs-3g":
+		err = makeGPT(devname)
+		if err != nil {
+			logrus.Debugf("[devset.go/createFilesystem] makeGPT error: %v", err)
+			return err
+		}
+		//mkfs ESP(FAT32)
+		args1 := []string{}
+		args1 = append(args1, "-F32", "-s1")
+		args1 = append(args1, devname+"1")
+		logrus.Debugf("[deviceset.go/createFilesystem] mkfs cmd: mkfs.fat %s", args1)
+		out, err := exec.Command("mkfs.fat", args1...).Output()
+		logrus.Debugf("[deviceset.go/createFilesystem] mkfs.fat result: %s", out)
+		if err != nil {
+			logrus.Debugf("[deviceset.go/createFilesystem] mkfs.fat for %v Failed! Error: %v", devname, err)
+			return err
+		}
+		//mkfs NTFS
+		args3 := append(args, devname+"3")
+		logrus.Debugf("[deviceset.go/createFilesystem] mkfs cmd: mkfs.ntfs %s", args3)
+		out, err = exec.Command("mkfs.ntfs", args3...).Output()
+		logrus.Debugf("[deviceset.go/createFilesystem] mkfs.ntfs result: %s", out)
+		if err != nil {
+			logrus.Debugf("[deviceset.go/createFilesystem] mkfs.ntfs for %v Failed! Error: %v", devname, err)
+			return err
+		}
 	case "xfs":
 		err = exec.Command("mkfs.xfs", args...).Run()
 	case "ext4":
@@ -629,8 +654,42 @@ func (devices *DeviceSet) createFilesystem(info *devInfo) (err error) {
 	default:
 		err = fmt.Errorf("devmapper: Unsupported filesystem type %s", devices.filesystem)
 	}
-	logrus.Debugf("[deviceset.go/createFilesystem] End - info.DevName():%v", info.DevName())
 	return
+}
+
+
+func makeGPT(devname string) (err error) {
+	//create makegpt.sh
+	filename := "/tmp/makegpt.sh"
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		panic(err)
+	}
+	/*
+		ESP 100MB
+		MSR 128MB
+		NTFS
+	*/
+	args := `parted $1 --script \
+ mklabel gpt \
+ mkpart ESP fat32 0% 100MiB \
+ set 1 boot on \
+ mkpart primary ntfs 100MiB 228MiB \
+ set 2 msftres on \
+ mkpart primary ntfs 228MiB 100% \
+ print`
+	if _, err = f.WriteString(args); err != nil {
+		panic(err)
+	}
+	f.Close()
+
+	logrus.Debugf("[deviceset.go/makeGPT] create GPT and ESP,MSR,NTFS partition, cmd: bash %s %s", filename, devname)
+	out, err := exec.Command("bash", filename, devname).Output()
+	logrus.Debugf("[deviceset.go/makeGPT] create GPT and ESP,MSR,NTFS partition result: %s", out)
+	if err != nil {
+		logrus.Debugf("[deviceset.go/makeGPT] create GPT and ESP,MSR,NTFS partition error: %v", err)
+	}
+	return err
 }
 
 func (devices *DeviceSet) migrateOldMetaData() error {
@@ -910,7 +969,9 @@ func getDeviceUUID(device string) (string, error) {
 	logrus.Debugf("[deviceset.go/getDeviceUUID] Begin - device:%v",device)
 	defer logrus.Debugf("[deviceset.go/getDeviceUUID] End - device:%v",device)
 
-	out, err := exec.Command("blkid", "-s", "UUID", "-o", "value", device).Output()
+	offset, err := findNTFS(device)
+	logrus.Debugf("[deviceset.go/getDeviceUUID] cmd: blkid -p -s UUID -o value -O %v %v", offset, device)
+	out, err := exec.Command("blkid", "-p", "-s", "UUID", "-o", "value", "-O", offset, device).Output()
 	if err != nil {
 		return "", fmt.Errorf("devmapper: Failed to find uuid for device %s:%v", device, err)
 	}
@@ -919,6 +980,33 @@ func getDeviceUUID(device string) (string, error) {
 	uuid = strings.TrimSpace(uuid)
 	logrus.Debugf("devmapper: UUID for device: %s is:%s", device, uuid)
 	return uuid, nil
+}
+
+func findNTFS(device string) (string, error) {
+	//create checkntfs.sh
+	filename := "/tmp/checkntfs.sh"
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		panic(err)
+	}
+	if _, err = f.WriteString("dd if=$1 bs=1024 count=256000 | hexdump -C | grep NTFS"); err != nil {
+		panic(err)
+	}
+	f.Close()
+
+	logrus.Debugf("[deviceset.go/findNTFS] find NTFS partition, cmd: bash %s %s", filename, device)
+	out, err := exec.Command("bash", filename, device).Output()
+	logrus.Debugf("[deviceset.go/findNTFS] find NTFS partition result: %s", out)
+	if err != nil {
+		logrus.Debugf("[deviceset.go/findNTFS] find NTFS partition error: %v", err)
+		return "0", err
+	}
+	offset16 := strings.TrimSuffix(string(out), "\n")
+	offset16 = strings.Split(offset16, "  ")[0]
+	offset10, err := strconv.ParseInt(offset16, 16, 64)
+
+	logrus.Debugf("[deviceset.go/findNTFS] offset (10):%v (16):%v", offset10, offset16)
+	return fmt.Sprintf("%v", offset10), err
 }
 
 func (devices *DeviceSet) getBaseDeviceSize() uint64 {
@@ -935,7 +1023,6 @@ func (devices *DeviceSet) getBaseDeviceFS() string {
 }
 
 func (devices *DeviceSet) verifyBaseDeviceUUIDFS(baseInfo *devInfo) error {
-	logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] Begin - baseInfo.DevName():%v", baseInfo.DevName())
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -944,7 +1031,22 @@ func (devices *DeviceSet) verifyBaseDeviceUUIDFS(baseInfo *devInfo) error {
 	}
 	defer devices.deactivateDevice(baseInfo)
 
-	uuid, err := getDeviceUUID(baseInfo.DevName())
+	uuid := ""
+	var err error
+
+	dev_base3 := baseInfo.DevName() + "3"
+	_, err = devicemapper.GetInfo(dev_base3)
+
+	if devices.filesystem == "ntfs-3g" && err == nil {
+		//dev_base3 exist
+		logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] getDeviceUUID %v", dev_base3)
+		uuid, err = getDeviceUUID(dev_base3)
+		if err != nil {
+			logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] getDeviceUUID %v failed, Error:%v", dev_base3, err)
+		}
+	} else {
+		uuid, err = getDeviceUUID(baseInfo.DevName())
+	}
 	if err != nil {
 		return err
 	}
@@ -970,7 +1072,6 @@ func (devices *DeviceSet) verifyBaseDeviceUUIDFS(baseInfo *devInfo) error {
 		logrus.Warnf("devmapper: Base device already exists and has filesystem %s on it. User specified filesystem %s will be ignored.", devices.BaseDeviceFilesystem, devices.filesystem)
 		devices.filesystem = devices.BaseDeviceFilesystem
 	}
-	logrus.Debugf("[deviceset.go/verifyBaseDeviceUUIDFS] End - baseInfo.DevName():%v", baseInfo.DevName())
 	return nil
 }
 
@@ -981,9 +1082,6 @@ func (devices *DeviceSet) saveBaseDeviceFilesystem(fs string) error {
 }
 
 func (devices *DeviceSet) saveBaseDeviceUUID(baseInfo *devInfo) error {
-	logrus.Debugf("[deviceset.go/saveBaseDeviceUUID] Begin - baseInfo.DevName():%v", baseInfo.DevName())
-	defer logrus.Debugf("[deviceset.go/saveBaseDeviceUUID] End - baseInfo.DevName():%v", baseInfo.DevName())
-
 	devices.Lock()
 	defer devices.Unlock()
 
@@ -992,7 +1090,13 @@ func (devices *DeviceSet) saveBaseDeviceUUID(baseInfo *devInfo) error {
 	}
 	defer devices.deactivateDevice(baseInfo)
 
-	uuid, err := getDeviceUUID(baseInfo.DevName())
+	uuid := ""
+	var err error
+	if devices.filesystem == "ntfs-3g" {
+		uuid, err = getDeviceUUID(baseInfo.DevName() + "3")
+	} else {
+		uuid, err = getDeviceUUID(baseInfo.DevName())
+	}
 	if err != nil {
 		return err
 	}
@@ -1161,7 +1265,12 @@ func (devices *DeviceSet) growFS(info *devInfo) error {
 
 	defer syscall.Unmount(fsMountPoint, syscall.MNT_DETACH)
 
+	logrus.Debugf("[deviceset.go/growFS] devices.BaseDeviceFilesystem: %v info.DevName():%v", devices.BaseDeviceFilesystem, info.DevName())
 	switch devices.BaseDeviceFilesystem {
+	case "ntfs-3g":
+		if out, err := exec.Command("ntfsresize", info.DevName()).CombinedOutput(); err != nil {
+			return fmt.Errorf("Failed to grow rootfs:%v:%s", err, string(out))
+		}
 	case "ext4":
 		if out, err := exec.Command("resize2fs", info.DevName()).CombinedOutput(); err != nil {
 			return fmt.Errorf("Failed to grow rootfs:%v:%s", err, string(out))
@@ -2045,7 +2154,7 @@ func (devices *DeviceSet) deactivatePool() error {
 }
 
 func (devices *DeviceSet) deactivateDevice(info *devInfo) error {
-	logrus.Debugf("devmapper: deactivateDevice(%s)", info.Hash)
+	logrus.Debugf("devmapper: deactivateDevice START(%s)", info.Hash)
 	defer logrus.Debugf("devmapper: deactivateDevice END(%s)", info.Hash)
 
 	devinfo, err := devicemapper.GetInfo(info.Name())
@@ -2062,9 +2171,25 @@ func (devices *DeviceSet) deactivateDevice(info *devInfo) error {
 			return err
 		}
 	} else {
+		if devices.filesystem == "ntfs-3g" {
+			for i := 1; i <= 3; i++ {
+				dev_base := info.Name() + strconv.Itoa(i)
+				logrus.Debugf("[deviceset.go/deactivateDevice] try to remove device:%v", dev_base)
+				_, err = devicemapper.GetInfo(dev_base)
+				if err == nil {
+					logrus.Debugf("[deviceset.go/deactivateDevice] find device :%v", dev_base)
+					if err := devices.removeDevice(dev_base); err != nil {
+						return err
+					}
+				} else {
+					logrus.Debugf("[deviceset.go/deactivateDevice] removeDevice %v failed, error:%v", dev_base, err)
+				}
+			}
+		}
 		if err := devices.removeDevice(info.Name()); err != nil {
 			return err
 		}
+		findNTFS(devices.getPoolDevName())
 	}
 	return nil
 }
@@ -2239,9 +2364,15 @@ func (devices *DeviceSet) MountDevice(hash, path, mountLabel string) error {
 		return nil
 	}
 
+	logrus.Debugf("[deviceset.go/MountDevice] Before - activateDeviceIfNeeded info:%v", info)
 	if err := devices.activateDeviceIfNeeded(info, false); err != nil {
 		return fmt.Errorf("devmapper: Error activating devmapper device for '%s': %s", hash, err)
 	}
+	logrus.Debugf("[deviceset.go/MountDevice] After - activateDeviceIfNeeded info:%v", info)
+
+	////[debug] just active device, skip mount
+	//return nil
+
 
 	fstype, err := ProbeFsType(info.DevName())
 	if err != nil {
@@ -2544,7 +2675,7 @@ func NewDeviceSet(root string, doInit bool, options []string, uidMaps, gidMaps [
 			}
 			devices.metaDataLoopbackSize = size
 		case "dm.fs":
-			if val != "ext4" && val != "xfs" {
+			if val != "ext4" && val != "xfs" && val != "ntfs-3g" {
 				return nil, fmt.Errorf("devmapper: Unsupported filesystem %s\n", val)
 			}
 			devices.filesystem = val

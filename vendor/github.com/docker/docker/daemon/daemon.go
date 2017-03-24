@@ -605,8 +605,8 @@ func (daemon *Daemon) registerLink(parent, child *container.Container, alias str
 // NewDaemon sets up everything for the daemon to be able to service
 // requests from the webserver.
 func NewDaemon(config *Config, registryService *registry.Service) (daemon *Daemon, err error) {
-	logrus.Debugf("[vendor/.../daemon.go/NewDaemon] Begin - config:%v registryService:%v", config, registryService)
-	defer logrus.Debugf("[vendor/.../daemon.go/NewDaemon] End - config:%v registryService:%v", config, registryService)
+	logrus.Debugf("[vendor/.../daemon.go/NewDaemon] Begin - config.GraphDriver:%v config.GraphOptions:%v", config.GraphDriver, config.GraphOptions)
+	defer logrus.Debugf("[vendor/.../daemon.go/NewDaemon] End - config.GraphDriver:%v config.GraphOptions:%v", config.GraphDriver, config.GraphOptions)
 
 	setDefaultMtu(config)
 
