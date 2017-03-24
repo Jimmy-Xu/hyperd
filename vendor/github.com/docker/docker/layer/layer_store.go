@@ -278,8 +278,8 @@ func (ls *layerStore) Register(ts io.Reader, parent ChainID) (Layer, error) {
 	defer func() {
 		if err != nil {
 			logrus.Debugf("Cleaning up layer %s: %v", layer.cacheID, err)
-			////[debug]
-			return
+			//////[debug]
+			//return
 
 			if err := ls.driver.Remove(layer.cacheID); err != nil {
 				logrus.Errorf("Error cleaning up cache layer %s: %v", layer.cacheID, err)

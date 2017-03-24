@@ -1,83 +1,116 @@
-[![Build Status](https://travis-ci.org/hyperhq/hyperd.svg?branch=master)](https://travis-ci.org/hyperhq/hyperd)
 
-HyperContainer - Hypervisor-agnostic Docker Runtime
-====
+# Build
 
-> This repo contains two parts: the daemon of HyperContainer `hyperd` and the CLI`hyperctl`.
+```
+cd ~/gopath/src/github.com/hyperhq/hyperd
+make
+```
 
-## What is HyperContainer?
+# Run hyperd with ntfs support
 
-**HyperContainer is a hypervisor-agnostic technology that allows you to run Docker images on plain hypervisor**.
+```
+//prepare required file in /run/hyper/
+$ sudo cp ~/gopath/src/github.com/hyperhq/hyperstart/build/{kernel,hyper-initrd.img} /run/hyper/
 
-![](https://trello-attachments.s3.amazonaws.com/5551c49246960a31feab3d35/1515x947/5265a9f72b589ef5dbf8b372b718c43e/Pasted_image_at_2016_04_16_07_33_PM.png)
+//start hyperd
+$ sudo ./hyperd --v=3 --host tcp://0.0.0.0:2375 --host unix:///var/run/hyperd.sock --storage-driver=devicemapper --storage-opt dm.fs=ntfs-3g --storage-opt dm.mkfsarg="-U" --storage-opt dm.mkfsarg="-p 2048" --storage-opt dm.mkfsarg="-f" --storage-opt dm.mountopt="offset=$((0x0e400000))" 
+```
 
-## Why HyperContainer?
------------
+# Load image
 
-**HyperContainer combines the best from both worlds: VM and Container**.
+```
+sudo ./hyperctl load -i ~/microsoft/nanoserver/nanoserver-latest.tar.gz
+```
 
-| -  | Container | VM | HyperContainer | 
-|---|---|---|---|
-| Isolation | Weak, shared kernel | Strong, HW-enforced  | Strong, HW-enforced  |
-| Portable  | Yes, but kernel dependent sometimes | No, hypervisor dependent | Yes, hypervisor agnostic and portable image |
-| Boot  | Fast, sub-second  | Slow, tens of seconds  | Fast, sub-second  |
-| Performance  | Great | OK| Good, minimal resource footprint and overhead |
-| Immutable | Yes  | No, configuration management required | Yes, only kernel+image  | 
-| Image Size| Small, MBs  | Big, GBs  | Small, MBs  |
-| Compatibility | No, need new tools | Great, everything just works  | Good, it is still a "Machine", much less changes  |
-| Mature   | Not yet  | Production ready, SDN, SDS, LiveMigration, etc.  | Yes, just plug-&-play|
-| ROI| Rebuild everything with container  | - | Reuse your virtual infrastructure  |
+# Create container
 
-> **BYOK* = bring your own kernel
+```
+sudo ./hyperctl create --name nanoserver microsoft/nanoserver
+```
 
-## Requirements
+# List
 
-- QEMU 2.0 or later (QEMU 2.6 or later for ARM64 Architecture)
-- Xen 4.5 and VT enabled host (for Xen support)
+```
+$ sudo ./hyperctl list
+POD ID              POD Name            VM name             Status
+nanoserver          nanoserver          vm-LSjCbwgRbn       running
 
-## Installation
+$ sudo ./hyperctl list container
+Container ID                                                       Name                POD ID              Status
+6ceded1a0e61290609f7f584d9b9f16d0ee173eb3dbb770b5915cd3bdd542f4e   nanoserver          nanoserver          pending
 
-Ensure you are running Linux (kernel 3.8 or later) and have Docker
-(version 1.5 or later) and QEMU (version 2.0 or later) installed. Then download the [binary tarball](https://hyper-install.s3.amazonaws.com/hyper-latest.tgz) and install it directly.
+$ ps -ef | grep qemu
+root       5174      1  0 19:51 ?        00:00:19 /bin/qemu-system-x86_64 -machine pc-i440fx-2.0,accel=kvm,usb=off -global kvm-pit.lost_tick_policy=discard -cpu host -kernel /run/hyper/kernel -initrd /run/hyper/hyper-initrd.img -append console=ttyS0 panic=1 no_timer_check -realtime mlock=off -no-user-config -nodefaults -no-hpet -rtc base=utc,driftfix=slew -no-reboot -display none -boot strict=on -m 128 -smp 1 -qmp unix:/var/run/hyper/vm-LSjCbwgRbn/qmp.sock,server,nowait -serial unix:/var/run/hyper/vm-LSjCbwgRbn/console.sock,server,nowait -device virtio-serial-pci,id=virtio-serial0,bus=pci.0,addr=0x2 -device virtio-scsi-pci,id=scsi0,bus=pci.0,addr=0x3 -chardev socket,id=charch0,path=/var/run/hyper/vm-LSjCbwgRbn/hyper.sock,server,nowait -device virtserialport,bus=virtio-serial0.0,nr=1,chardev=charch0,id=channel0,name=sh.hyper.channel.0 -chardev socket,id=charch1,path=/var/run/hyper/vm-LSjCbwgRbn/tty.sock,server,nowait -device virtserialport,bus=virtio-serial0.0,nr=2,chardev=charch1,id=channel1,name=sh.hyper.channel.1 -fsdev local,id=virtio9p,path=/var/run/hyper/vm-LSjCbwgRbn/share_dir,security_model=none -device virtio-9p-pci,fsdev=virtio9p,mount_tag=share_dir -daemonize -pidfile /var/run/hyper/vm-LSjCbwgRbn/pidfile -D /var/log/hyper/qemu/vm-LSjCbwgRbn.log
 
-For RHEL/CentOS 7.x, you can use our [RPMs](http://docs.hypercontainer.io/get_started/install/linux.html)
+```
 
-For information on using the command line, just type `hyperctl`. You may use
-`hyperctl <command> --help` for detailed information on any specific command.
+# View devicemapper
 
-
-## Example
-
-
-## Build From Source
-
-Clone hyperd in GoPath
-
-    > mkdir -p ${GOPATH}/src/github.com/hyperhq
-    > cd ${GOPATH}/src/github.com/hyperhq
-    > git clone https://github.com/hyperhq/hyperd.git hyperd
-
-And make sure you have `go` (>= 1.4) , `device-mapper-devel`, and `autotools`, go into the `hyper` dir
-
-    > ./autogen.sh
-    > ./configure
-    > make
-
-Then you can find the binaries `hyperd` daemon and `hyperctl` cmdline tool in current directory. Before running those commands, a config file needs to be placed at `/etc/hyper/config` directory, and you can find a sample under `${TOP}/package/dist/etc/hyper/config`. `Kernel` and `Initrd` are required for starting the hyperd daemon, you can find those files from [HyperStart](https://github.com/hyperhq/hyperstart) project.
+```
+// list devicemapper for nanoserver container
+$ ll /dev/mapper 
+total 0
+crw------- 1 root root 10, 236 Mar 24 18:48 control
+...
+lrwxrwxrwx 1 root root       7 Mar 24 19:50 docker-8:16-8388674-base -> ../dm-4
+lrwxrwxrwx 1 root root       7 Mar 24 20:34 docker-8:16-8388674-f33437de971b2260481a87147acd07c84f9631b534c59583f247cdea4bbd4ed2 -> ../dm-6    <<<<<<
+lrwxrwxrwx 1 root root       7 Mar 24 19:51 docker-8:16-8388674-f33437de971b2260481a87147acd07c84f9631b534c59583f247cdea4bbd4ed2-init -> ../dm-5
+lrwxrwxrwx 1 root root       7 Mar 24 19:42 docker-8:16-8388674-pool -> ../dm-0
 
 
-## Find out more
+// show disk partition(GPT, ESP+MSR+NTFS)
+$ sudo parted /dev/mapper/docker-8:16-8388674-f33437de971b2260481a87147acd07c84f9631b534c59583f247cdea4bbd4ed2 print
+Error: The backup GPT table is corrupt, but the primary appears OK, so that will be used.
+OK/Cancel? OK
+Model: Linux device-mapper (thin) (dm)
+Disk /dev/mapper/docker-8:16-8388674-f33437de971b2260481a87147acd07c84f9631b534c59583f247cdea4bbd4ed2: 10.7GB
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+Disk Flags: 
 
- * [Documentation](http://docs.hypercontainer.io)
- * [Get Started](http://docs.hypercontainer.io/get_started/index.html)
- * [Reference](http://docs.hypercontainer.io/reference/index.html)
- * [Release Notes](http://docs.hypercontainer.io/release_notes/latest.html)
+Number  Start   End     Size    File system  Name     Flags
+ 1      1049kB  105MB   104MB   fat32        ESP      boot
+ 2      105MB   239MB   134MB                primary  msftres
+ 3      239MB   10.7GB  10.5GB  ntfs         primary
 
-## Contact Us
 
-Found a bug, want to suggest a feature, or have a question?
-[File an issue](https://github.com/hyperhq/hyperd/issues). When reporting a bug, please include which version of hyperd you are running, as shown by `hyperctl --version`.
 
-* Twitter: [@hyper_sh](https://twitter.com/hyper_sh)
-* Blog: [https://hyper.sh/blog.html](https://blog.hyper.sh/)
-* Slack: [#hyper](https://slack.hyper.sh/) (The IRC has been migrated to slack.)
+// mount device of nanoserver 
+$ sudo mkdir -p /mnt/docker_ntfs
+$ sudo mount -o loop,offset=$((0x0e400000)) /dev/mapper/docker-8:16-8388674-f33437de971b2260481a87147acd07c84f9631b534c59583f247cdea4bbd4ed2 /mnt/docker_ntfs
+
+
+// list dir and files
+$ sudo tree /mnt/docker_ntfs -L 3
+/mnt/docker_ntfs
+├── id
+└── rootfs
+    ├── dev
+    │   ├── console
+    │   ├── pts
+    │   └── shm
+    ├── etc
+    │   ├── hostname
+    │   ├── hosts
+    │   ├── mtab -> /proc/mounts
+    │   └── resolv.conf
+    ├── Files
+    │   ├── License.txt
+    │   ├── ProgramData
+    │   ├── Program\ Files
+    │   ├── Program\ Files\ (x86)
+    │   ├── Users
+    │   └── Windows
+    ├── Hives
+    │   ├── DefaultUser_Delta
+    │   ├── Sam_Delta
+    │   ├── Security_Delta
+    │   ├── Software_Delta
+    │   └── System_Delta
+    ├── proc
+    ├── sys
+    └── UtilityVM
+        └── Files
+
+16 directories, 12 files
+```
